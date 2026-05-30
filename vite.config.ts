@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import basicSsl from "@vitejs/plugin-basic-ssl";
 
 export default defineConfig(({ mode }) => ({
+  base: mode === "production" ? "/9-dragon-battle/" : "/",
   plugins: mode === "https" ? [react(), basicSsl()] : [react()],
   server: {
     host: "0.0.0.0",
