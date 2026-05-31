@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Camera,
   CheckCircle2,
-  Flashlight,
   Loader2,
   RotateCcw,
   ScanLine,
@@ -25,9 +24,11 @@ import {
 
 type ScannerStatus = "idle" | "starting" | "running" | "error";
 type PlayerNames = Record<Side, string>;
+type CameraTrackConstraintSet = MediaTrackConstraintSet & {
+  focusMode?: "continuous";
+};
 
 const SCANNER_ELEMENT_ID = "qr-scanner";
-const QR_BOX_SIZE = 240;
 const MAX_NICKNAME_BYTES = 10;
 const DEFAULT_PLAYER_NAMES: PlayerNames = {
   A: "A",
@@ -57,6 +58,16 @@ function limitNicknameBytes(value: string) {
   }
 
   return nextValue;
+}
+
+function getQrBoxSize(viewfinderWidth: number, viewfinderHeight: number) {
+  const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+  const size = Math.floor(Math.min(Math.max(minEdge * 0.58, 190), 280));
+
+  return {
+    width: size,
+    height: size,
+  };
 }
 
 function vibrate() {
@@ -263,18 +274,69 @@ export default function App() {
       return;
     }
 
+    scanLockedRef.current = false;
+    setScannerStatus("starting");
+
+    const cameraConstraints: MediaTrackConstraints[] = [
+      {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        advanced: [{ focusMode: "continuous" } as CameraTrackConstraintSet],
+      },
+      { facingMode: "environment" },
+    ];
+
+    for (const cameraConfig of cameraConstraints) {
+      const scanner = new Html5Qrcode(SCANNER_ELEMENT_ID);
+      scannerRef.current = scanner;
+
+      try {
+        await scanner.start(
+          cameraConfig,
+          {
+            fps: 20,
+            qrbox: getQrBoxSize,
+            disableFlip: true,
+          },
+          (decodedText) => {
+            if (scanLockedRef.current) {
+              return;
+            }
+
+            scanLockedRef.current = true;
+            registerScan(decodedText);
+            void stopScanner();
+          },
+          undefined,
+        );
+
+        setScannerStatus("running");
+        setMessage(
+          "카메라 스캔 중입니다. 작은 QR은 박스 안에 크게 차도록 가까이 비춰주세요.",
+        );
+        return;
+      } catch {
+        scannerRef.current = null;
+        try {
+          scanner.clear();
+        } catch {
+          // Ignore cleanup errors between camera fallback attempts.
+        }
+      }
+    }
+
     try {
-      scanLockedRef.current = false;
-      setScannerStatus("starting");
       const scanner = new Html5Qrcode(SCANNER_ELEMENT_ID);
       scannerRef.current = scanner;
 
       await scanner.start(
-        { facingMode: "environment" },
         {
-          fps: 10,
-          qrbox: { width: QR_BOX_SIZE, height: QR_BOX_SIZE },
-          aspectRatio: 1,
+          facingMode: "environment",
+        },
+        {
+          fps: 15,
+          qrbox: getQrBoxSize,
         },
         (decodedText) => {
           if (scanLockedRef.current) {
@@ -289,7 +351,9 @@ export default function App() {
       );
 
       setScannerStatus("running");
-      setMessage("카메라 스캔 중입니다.");
+      setMessage(
+        "카메라 스캔 중입니다. 작은 QR은 박스 안에 크게 차도록 가까이 비춰주세요.",
+      );
     } catch {
       scannerRef.current = null;
       scanLockedRef.current = false;
@@ -480,12 +544,6 @@ export default function App() {
             </header>
             <div className="scanner-panel">
               <div id={SCANNER_ELEMENT_ID} className="scanner" />
-              <div className="scan-frame" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-                <span />
-              </div>
               <div className="scanner-state">
                 {scannerStatus === "running" ? (
                   <ScanLine size={18} />
@@ -499,9 +557,6 @@ export default function App() {
                   {scannerStatus === "error" && "카메라 사용 불가"}
                 </span>
               </div>
-            </div>
-            <div className="flashlight-button" aria-hidden="true">
-              <Flashlight size={22} />
             </div>
             <button
               className="camera-close-button"

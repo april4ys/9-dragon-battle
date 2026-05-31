@@ -220,11 +220,20 @@ h1 {
 
 .scanner {
   width: 100%;
-  min-height: 280px;
+  aspect-ratio: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .scanner video {
+  width: 100% !important;
+  height: 100% !important;
   object-fit: cover;
+}
+
+.scanner img,
+.scanner canvas {
+  max-width: 100%;
 }
 
 .scanner-state {
@@ -496,81 +505,22 @@ h1 {
 }
 
 .scan-modal .scanner-panel {
-  min-height: 620px;
   display: flex;
   flex-direction: column;
   justify-content: stretch;
 }
 
 .scan-modal .scanner {
-  flex: 1;
-  min-height: 520px;
+  flex: 0 0 auto;
+  min-height: 0;
 }
 
-.scan-frame {
-  position: absolute;
-  inset: 26% 9% 26%;
-  pointer-events: none;
-  border-top: 2px solid rgba(240, 75, 79, 0.9);
+.scan-modal .scanner > div {
+  height: 100% !important;
 }
 
-.scan-frame::after {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  height: 2px;
-  content: "";
-  background: rgba(240, 75, 79, 0.9);
-  box-shadow: 0 0 18px rgba(240, 75, 79, 0.42);
-}
-
-.scan-frame span {
-  position: absolute;
-  width: 32px;
-  height: 32px;
-  border-color: #ffffff;
-}
-
-.scan-frame span:nth-child(1) {
-  top: 0;
-  left: 0;
-  border-top: 4px solid;
-  border-left: 4px solid;
-}
-
-.scan-frame span:nth-child(2) {
-  top: 0;
-  right: 0;
-  border-top: 4px solid;
-  border-right: 4px solid;
-}
-
-.scan-frame span:nth-child(3) {
-  bottom: 0;
-  left: 0;
-  border-bottom: 4px solid;
-  border-left: 4px solid;
-}
-
-.scan-frame span:nth-child(4) {
-  right: 0;
-  bottom: 0;
-  border-right: 4px solid;
-  border-bottom: 4px solid;
-}
-
-.flashlight-button {
-  width: 54px;
-  height: 54px;
-  display: grid;
-  place-items: center;
-  align-self: center;
-  margin-top: -90px;
-  z-index: 1;
-  border-radius: 50%;
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.16);
+.scan-modal .scanner #qr-shaded-region {
+  border-width: 0 !important;
 }
 
 .winner-modal {
@@ -783,11 +733,7 @@ h1 {
     padding: 20px 16px 18px;
   }
 
-  .scan-modal .scanner-panel {
-    min-height: 540px;
-  }
-
   .scan-modal .scanner {
-    min-height: 440px;
+    min-height: 0;
   }
 }
