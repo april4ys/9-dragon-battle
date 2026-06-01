@@ -9,7 +9,7 @@ import {
   Trophy,
   X,
 } from "lucide-react";
-import { Html5Qrcode } from "html5-qrcode";
+import QrScanner from "qr-scanner";
 import {
   type GameState,
   type RoundResult,
@@ -24,16 +24,20 @@ import {
 
 type ScannerStatus = "idle" | "starting" | "running" | "error";
 type PlayerNames = Record<Side, string>;
-type CameraTrackConstraintSet = MediaTrackConstraintSet & {
-  focusMode?: "continuous";
-};
 
 const SCANNER_ELEMENT_ID = "qr-scanner";
 const MAX_NICKNAME_BYTES = 10;
+const SCANNER_STOP_DELAY_MS = 300;
+const QR_SCANNER_CONFIG = QrScanner as unknown as {
+  _disableBarcodeDetector?: boolean;
+};
 const DEFAULT_PLAYER_NAMES: PlayerNames = {
   A: "A",
   B: "B",
 };
+
+// The worker decoder honors inversionMode consistently for white-on-black QR.
+QR_SCANNER_CONFIG._disableBarcodeDetector = true;
 
 function getNicknameBytes(value: string) {
   return Array.from(value).reduce(
@@ -58,16 +62,6 @@ function limitNicknameBytes(value: string) {
   }
 
   return nextValue;
-}
-
-function getQrBoxSize(viewfinderWidth: number, viewfinderHeight: number) {
-  const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-  const size = Math.floor(Math.min(Math.max(minEdge * 0.58, 190), 280));
-
-  return {
-    width: size,
-    height: size,
-  };
 }
 
 function vibrate() {
@@ -113,9 +107,11 @@ export default function App() {
     useState<PlayerNames>(DEFAULT_PLAYER_NAMES);
   const [draftPlayerNames, setDraftPlayerNames] =
     useState<PlayerNames>(DEFAULT_PLAYER_NAMES);
-  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const scannerRef = useRef<QrScanner | null>(null);
+  const scannerVideoRef = useRef<HTMLVideoElement | null>(null);
   const lastScanRef = useRef<{ code: string; time: number } | null>(null);
   const scanLockedRef = useRef(false);
+  const stopTimerRef = useRef<number | null>(null);
 
   const winner = useMemo(() => finalWinner(gameState), [gameState]);
   const completedRounds = Math.floor(gameState.usedCards.length / 2);
@@ -126,6 +122,11 @@ export default function App() {
   const winnerName = winner ? playerNames[winner] : "";
 
   const stopScanner = useCallback(async () => {
+    if (stopTimerRef.current !== null) {
+      window.clearTimeout(stopTimerRef.current);
+      stopTimerRef.current = null;
+    }
+
     const scanner = scannerRef.current;
     scannerRef.current = null;
     scanLockedRef.current = true;
@@ -138,10 +139,8 @@ export default function App() {
     }
 
     try {
-      if (scanner.isScanning) {
-        await scanner.stop();
-      }
-      scanner.clear();
+      scanner.stop();
+      scanner.destroy();
     } catch {
       // The scanner may already be stopping after a successful read.
     } finally {
@@ -270,99 +269,72 @@ export default function App() {
       return;
     }
 
-    if (!document.getElementById(SCANNER_ELEMENT_ID)) {
+    const video = scannerVideoRef.current;
+
+    if (!video) {
       return;
     }
 
     scanLockedRef.current = false;
     setScannerStatus("starting");
 
-    const cameraConstraints: MediaTrackConstraints[] = [
-      {
-        facingMode: { ideal: "environment" },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
-        advanced: [{ focusMode: "continuous" } as CameraTrackConstraintSet],
-      },
-      { facingMode: "environment" },
-    ];
-
-    for (const cameraConfig of cameraConstraints) {
-      const scanner = new Html5Qrcode(SCANNER_ELEMENT_ID);
-      scannerRef.current = scanner;
-
-      try {
-        await scanner.start(
-          cameraConfig,
-          {
-            fps: 20,
-            qrbox: getQrBoxSize,
-            disableFlip: true,
-          },
-          (decodedText) => {
-            if (scanLockedRef.current) {
-              return;
-            }
-
-            scanLockedRef.current = true;
-            registerScan(decodedText);
-            void stopScanner();
-          },
-          undefined,
-        );
-
-        setScannerStatus("running");
-        setMessage(
-          "카메라 스캔 중입니다. 작은 QR은 박스 안에 크게 차도록 가까이 비춰주세요.",
-        );
-        return;
-      } catch {
-        scannerRef.current = null;
-        try {
-          scanner.clear();
-        } catch {
-          // Ignore cleanup errors between camera fallback attempts.
-        }
-      }
-    }
-
     try {
-      const scanner = new Html5Qrcode(SCANNER_ELEMENT_ID);
-      scannerRef.current = scanner;
+      const scanner = new QrScanner(
+        video,
+        (result) => {
+          console.log("QR decoded:", result.data);
+          console.log(result);
 
-      await scanner.start(
-        {
-          facingMode: "environment",
-        },
-        {
-          fps: 15,
-          qrbox: getQrBoxSize,
-        },
-        (decodedText) => {
           if (scanLockedRef.current) {
             return;
           }
 
           scanLockedRef.current = true;
-          registerScan(decodedText);
-          void stopScanner();
+          registerScan(result.data);
+          stopTimerRef.current = window.setTimeout(() => {
+            stopTimerRef.current = null;
+            void stopScanner();
+          }, SCANNER_STOP_DELAY_MS);
         },
-        undefined,
+        {
+          onDecodeError: (error) => {
+            if (error !== QrScanner.NO_QR_CODE_FOUND) {
+              console.warn("QR decode error:", error);
+            }
+          },
+          preferredCamera: "environment",
+          maxScansPerSecond: 15,
+          returnDetailedScanResult: true,
+        },
       );
 
+      scanner.setInversionMode("both");
+      scannerRef.current = scanner;
+      await scanner.start();
+
       setScannerStatus("running");
-      setMessage(
-        "카메라 스캔 중입니다. 작은 QR은 박스 안에 크게 차도록 가까이 비춰주세요.",
-      );
-    } catch {
+      setMessage("카메라 스캔 중입니다. 카드를 자연스럽게 비춰주세요.");
+    } catch (error) {
+      console.warn("QR scanner start failed:", error);
+      const scanner = scannerRef.current;
       scannerRef.current = null;
+
+      if (scanner) {
+        scanner.destroy();
+      }
+
       scanLockedRef.current = false;
       setScannerStatus("error");
       setMessage(
-        "카메라를 시작할 수 없습니다. iPhone에서는 Safari로 HTTPS 주소를 열고 카메라 권한을 허용하세요.",
+        "카메라를 시작할 수 없습니다. HTTPS 주소에서 카메라 권한을 허용했는지 확인하세요.",
       );
     }
-  }, [gameState.gameOver, registerScan, scannerStatus, stopScanner]);
+  }, [
+    gameState.gameOver,
+    registerScan,
+    scannerStatus,
+    stopScanner,
+  ]);
 
   useEffect(() => {
     if (scannerOpen && scannerStatus === "idle") {
@@ -385,17 +357,11 @@ export default function App() {
         return;
       }
 
-      if (scanner.isScanning) {
-        scanner
-          .stop()
-          .then(() => scanner.clear())
-          .catch(() => undefined);
-      } else {
-        try {
-          scanner.clear();
-        } catch {
-          // Ignore scanner cleanup races during unmount.
-        }
+      try {
+        scanner.stop();
+        scanner.destroy();
+      } catch {
+        // Ignore scanner cleanup races during unmount.
       }
     };
   }, []);
@@ -543,7 +509,14 @@ export default function App() {
               </button>
             </header>
             <div className="scanner-panel">
-              <div id={SCANNER_ELEMENT_ID} className="scanner" />
+              <div id={SCANNER_ELEMENT_ID} className="scanner">
+                <video
+                  ref={scannerVideoRef}
+                  muted
+                  playsInline
+                  className="scanner-video"
+                />
+              </div>
               <div className="scanner-state">
                 {scannerStatus === "running" ? (
                   <ScanLine size={18} />
