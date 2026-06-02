@@ -1,5 +1,6 @@
 export type Side = "A" | "B";
 export type RoundResult = Side | "DRAW";
+export type FinalResult = RoundResult | null;
 
 export type RoundLog = {
   round: number;
@@ -15,9 +16,12 @@ export type GameState = {
   usedCards: string[];
   roundLogs: RoundLog[];
   gameOver: boolean;
+  finalResult: FinalResult;
 };
 
 export const WIN_TARGET = 5;
+export const MAX_ROUNDS = 9;
+export const TOTAL_CARD_COUNT = 18;
 
 export const VALID_CARDS = new Set(
   Array.from({ length: 9 }, (_, index) => index + 1).flatMap((value) => [
@@ -35,6 +39,7 @@ export const initialGameState: GameState = {
   usedCards: [],
   roundLogs: [],
   gameOver: false,
+  finalResult: null,
 };
 
 export function normalizeCardCode(rawValue: string): string {
@@ -70,4 +75,58 @@ export function compareCards(aCard: string, bCard: string): RoundResult {
   }
 
   return aValue > bValue ? "A" : "B";
+}
+
+export function getFinalResult(
+  aWins: number,
+  bWins: number,
+  usedCardsCount: number,
+): FinalResult {
+  if (aWins >= WIN_TARGET) {
+    return "A";
+  }
+
+  if (bWins >= WIN_TARGET) {
+    return "B";
+  }
+
+  const completedRounds = Math.floor(usedCardsCount / 2);
+  const remainingRounds = Math.max(MAX_ROUNDS - completedRounds, 0);
+
+  if (aWins > bWins + remainingRounds) {
+    return "A";
+  }
+
+  if (bWins > aWins + remainingRounds) {
+    return "B";
+  }
+
+  if (usedCardsCount < TOTAL_CARD_COUNT) {
+    return null;
+  }
+
+  if (aWins > bWins) {
+    return "A";
+  }
+
+  if (bWins > aWins) {
+    return "B";
+  }
+
+  return "DRAW";
+}
+
+export function getNextFirstSide(
+  result: RoundResult,
+  previousLogs: RoundLog[],
+): Side | null {
+  if (result !== "DRAW") {
+    return result;
+  }
+
+  const previousWinner = [...previousLogs]
+    .reverse()
+    .find((log) => log.result !== "DRAW")?.result;
+
+  return previousWinner === "A" || previousWinner === "B" ? previousWinner : null;
 }

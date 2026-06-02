@@ -402,6 +402,7 @@ h1 {
   color: #cdd5d5;
   line-height: 1.45;
   text-align: center;
+  white-space: pre-line;
 }
 
 .reset-button,
@@ -549,6 +550,11 @@ h1 {
   color: #348cff;
 }
 
+.winner-modal.tone-draw svg,
+.winner-modal.tone-draw strong {
+  color: #f6f2ea;
+}
+
 .winner-modal p {
   margin: 0 0 8px;
   color: #e7dfd2;
@@ -572,6 +578,11 @@ h1 {
 
 .winner-modal.tone-b .new-game-button {
   background: linear-gradient(135deg, #1875ee, #348cff);
+}
+
+.winner-modal.tone-draw .new-game-button {
+  color: #101418;
+  background: #f6f2ea;
 }
 
 .winner-modal .new-game-button,
@@ -645,6 +656,10 @@ h1 {
 
 .tone-b .confetti span {
   background: #348cff;
+}
+
+.tone-draw .confetti span {
+  background: #f6f2ea;
 }
 
 .confetti span:nth-child(1) {

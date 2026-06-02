@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Camera,
   CheckCircle2,
@@ -14,9 +14,10 @@ import {
   type GameState,
   type RoundResult,
   type Side,
-  WIN_TARGET,
   compareCards,
   getCardSide,
+  getFinalResult,
+  getNextFirstSide,
   initialGameState,
   isValidCard,
   normalizeCardCode,
@@ -81,18 +82,6 @@ function resultLabel(
   return result === "DRAW" ? "무승부" : `${playerNames[result]} 승리`;
 }
 
-function finalWinner(state: GameState): Side | null {
-  if (state.aWins >= WIN_TARGET) {
-    return "A";
-  }
-
-  if (state.bWins >= WIN_TARGET) {
-    return "B";
-  }
-
-  return null;
-}
-
 export default function App() {
   const [gameState, setGameState] = useState<GameState>(initialGameState);
   const [lastResult, setLastResult] = useState<RoundResult | null>(null);
@@ -113,12 +102,14 @@ export default function App() {
   const scanLockedRef = useRef(false);
   const stopTimerRef = useRef<number | null>(null);
 
-  const winner = useMemo(() => finalWinner(gameState), [gameState]);
+  const finalResult = gameState.finalResult;
+  const winner = finalResult === "A" || finalResult === "B" ? finalResult : null;
+  const isFinalDraw = finalResult === "DRAW";
   const completedRounds = Math.floor(gameState.usedCards.length / 2);
   const currentRound = gameState.gameOver
     ? completedRounds
     : completedRounds + 1;
-  const winnerTone = winner === "B" ? "tone-b" : "tone-a";
+  const winnerTone = isFinalDraw ? "tone-draw" : winner === "B" ? "tone-b" : "tone-a";
   const winnerName = winner ? playerNames[winner] : "";
 
   const stopScanner = useCallback(async () => {
@@ -206,15 +197,22 @@ export default function App() {
           );
           const aWins = current.aWins + (result === "A" ? 1 : 0);
           const bWins = current.bWins + (result === "B" ? 1 : 0);
-          const gameOver = aWins >= WIN_TARGET || bWins >= WIN_TARGET;
           const round = Math.floor(current.usedCards.length / 2) + 1;
+          const nextFirstSide = getNextFirstSide(result, current.roundLogs);
           const roundLogs = [...current.roundLogs, { round, result }];
+          const finalResult = getFinalResult(aWins, bWins, usedCards.length);
+          const gameOver = finalResult !== null;
+          const firstPlayerMessage = nextFirstSide
+            ? `\n${playerNames[nextFirstSide]}가 선입니다.`
+            : "";
 
           setLastResult(result);
           setMessage(
-            gameOver
-              ? `${playerNames[aWins >= WIN_TARGET ? "A" : "B"]} 최종 승리`
-              : `양쪽 카드 스캔 완료. ${resultLabel(result, playerNames)}`,
+            finalResult
+              ? finalResult === "DRAW"
+                ? "최종 무승부"
+                : `${playerNames[finalResult]} 최종 승리`
+              : `양쪽 카드 스캔 완료. ${resultLabel(result, playerNames)}${firstPlayerMessage}`,
           );
 
           return {
@@ -226,6 +224,7 @@ export default function App() {
             usedCards,
             roundLogs,
             gameOver,
+            finalResult,
           };
         }
 
@@ -343,10 +342,10 @@ export default function App() {
   }, [scannerOpen, scannerStatus, startScanner]);
 
   useEffect(() => {
-    if (winner) {
+    if (finalResult) {
       setWinnerModalOpen(true);
     }
-  }, [winner]);
+  }, [finalResult]);
 
   useEffect(() => {
     return () => {
@@ -542,12 +541,12 @@ export default function App() {
         </div>
       ) : null}
 
-      {winner && winnerModalOpen && !scannerOpen ? (
+      {finalResult && winnerModalOpen && !scannerOpen ? (
         <div
           className="modal-backdrop"
           role="dialog"
           aria-modal="true"
-          aria-label="최종 승리"
+          aria-label={isFinalDraw ? "최종 무승부" : "최종 승리"}
         >
           <section className={`winner-modal ${winnerTone}`}>
             <div className="confetti" aria-hidden="true">
@@ -556,11 +555,12 @@ export default function App() {
               ))}
             </div>
             <Trophy size={42} aria-hidden="true" />
-            <span>최종 승리</span>
-            <strong>{winnerName} 승리!</strong>
+            <span>{isFinalDraw ? "게임 종료" : "최종 승리"}</span>
+            <strong>{isFinalDraw ? "최종 무승부" : `${winnerName} 승리!`}</strong>
             <p>
-              {currentRound}라운드 만에 {winnerName}이 먼저 {WIN_TARGET}승을
-              달성했습니다.
+              {isFinalDraw
+                ? `${currentRound}라운드 종료. 양측 승수가 같아 무승부입니다.`
+                : `${currentRound}라운드 만에 ${winnerName}이 최종 승리를 달성했습니다.`}
             </p>
             <div
               className="scoreboard"

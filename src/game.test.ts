@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { compareCards, isValidCard, normalizeCardCode } from "./game";
+import {
+  compareCards,
+  getFinalResult,
+  getNextFirstSide,
+  isValidCard,
+  normalizeCardCode,
+} from "./game";
 
 describe("compareCards", () => {
   it("returns the higher value winner", () => {
@@ -28,5 +34,50 @@ describe("card validation", () => {
 
   it("normalizes scanned text", () => {
     expect(normalizeCardCode(" b7\n")).toBe("B7");
+  });
+});
+
+describe("getFinalResult", () => {
+  it("ends immediately when a side reaches 5 wins", () => {
+    expect(getFinalResult(5, 2, 14)).toBe("A");
+    expect(getFinalResult(3, 5, 16)).toBe("B");
+  });
+
+  it("returns DRAW after all 9 rounds when wins are tied", () => {
+    expect(getFinalResult(0, 0, 18)).toBe("DRAW");
+    expect(getFinalResult(2, 2, 18)).toBe("DRAW");
+  });
+
+  it("compares wins after all 9 rounds when no side reached 5 wins", () => {
+    expect(getFinalResult(3, 2, 18)).toBe("A");
+    expect(getFinalResult(2, 3, 18)).toBe("B");
+  });
+
+  it("ends when the leader cannot be caught with the remaining rounds", () => {
+    expect(getFinalResult(4, 0, 12)).toBe("A");
+  });
+
+  it("does not end when the opponent can still tie", () => {
+    expect(getFinalResult(4, 0, 10)).toBeNull();
+  });
+});
+
+describe("getNextFirstSide", () => {
+  it("uses the round winner as the next first side", () => {
+    expect(getNextFirstSide("A", [])).toBe("A");
+    expect(getNextFirstSide("B", [])).toBe("B");
+  });
+
+  it("keeps the previous first side when the round is a draw", () => {
+    expect(
+      getNextFirstSide("DRAW", [
+        { round: 1, result: "A" },
+        { round: 2, result: "DRAW" },
+      ]),
+    ).toBe("A");
+  });
+
+  it("has no first side after a draw if no previous side won", () => {
+    expect(getNextFirstSide("DRAW", [{ round: 1, result: "DRAW" }])).toBeNull();
   });
 });
