@@ -14,7 +14,7 @@
 
 ## 플레이하기
 
-🌐 https://april4ys.github.io/9-dragon-battle/
+🌐 https://april4ys.github.io/Showdown_Tactics_QRreader/
 
 모바일 브라우저 사용을 권장합니다.
 
